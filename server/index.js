@@ -93,7 +93,87 @@ function generateRandomMessage() {
   }
 }
 
-console.log(generateRandomMessage());
+
+let totalTransmissions = 0;
+let successfulTransmissions = 0;
+io.on('connection', (socket) => {
+  // Emitter Service functionality
+  let randomMessage;
+  const emitSuccessRate = () => {
+    if (totalTransmissions === 0) {
+      return 0; // Avoid division by zero
+    }
+    const successRate = (successfulTransmissions / totalTransmissions) * 100;
+    socket.emit('successRate', successRate);
+  };
+
+
+  setInterval(() => {
+    randomMessage = generateRandomMessage();
+
+    if (randomMessage) {
+      const { secret_key, encrypted_message } = randomMessage;
+
+      try {
+        const iv = Buffer.from(encrypted_message.slice(0, 32), 'hex'); // IV is the first 16 bytes
+        const encryptedData = Buffer.from(encrypted_message.slice(32), 'hex'); // Encrypted data is the rest
+
+        const decipher = crypto.createDecipheriv(
+          'aes-256-ctr', // Use AES-256 encryption
+          Buffer.from(secret_key, 'hex'), // Use the secret_key
+          iv
+        );
+
+        const decryptedMessage = Buffer.concat([
+          decipher.update(encryptedData),
+          decipher.final(),
+        ]).toString();
+
+
+        try {
+          const messageData = JSON.parse(decryptedMessage);
+
+          const { name, origin, destination, secret_key } = messageData;
+          const calculatedSecretKey = crypto
+            .createHash('sha256')
+            .update(JSON.stringify({ name, origin, destination }))
+            .digest('hex');
+
+          if (secret_key === calculatedSecretKey) {
+            const timestampedMessage = {
+              ...messageData,
+              timestamp: new Date(),
+            };
+
+            // Insert the new data into the database
+            MessageModel.create(timestampedMessage)
+              .then((savedMessage) => {
+                console.log('New message saved to MongoDB');
+                socket.emit('decryptedMessages', [savedMessage]);
+                console.log('Emitting decrypted message');
+                successfulTransmissions++; // Increment successful transmissions
+                emitSuccessRate();
+              })
+              .catch((err) => {
+                console.error('Error saving new message to MongoDB:', err);
+                emitSuccessRate(); 
+              });
+          } else {
+            console.error('Secret key mismatch');
+            emitSuccessRate(); 
+          }
+        } catch (jsonParseError) {
+          console.error('Error parsing decrypted JSON message:', jsonParseError);
+          emitSuccessRate(); 
+        }
+      } catch (decryptionError) {
+        console.error('Error decrypting message:', decryptionError);
+        emitSuccessRate(); 
+      }
+    }
+    totalTransmissions++;
+  }, 10000);
+});
 
 server.listen(5000, () => {
   console.log('Server is running on port 5000');
