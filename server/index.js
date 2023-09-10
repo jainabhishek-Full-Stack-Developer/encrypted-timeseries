@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const cors = require('cors');
 const data = require('./data.json');
 
-const app = express();
+const app = express();    
 app.use(cors());
 const server = http.createServer(app);
 
