@@ -9,6 +9,21 @@ const data = require('./data.json');
 const app = express();    
 app.use(cors());
 const server = http.createServer(app);
+const currentDateAndTime = new Date();
+
+const options = {
+  timeZone: 'Asia/Kolkata',
+  hour12: true, // Use 12-hour time format
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+};
+
+const formattedDate = currentDateAndTime.toLocaleString('en-IN', options);
+
 
 // Middleware
 app.get('/', (req, res) => {
@@ -32,7 +47,7 @@ const MessageSchema = new mongoose.Schema({
   origin: String,
   destination: String,
   secret_key: String,
-  timestamp: Date,
+  timestamp: String,
 });
 
 const MessageModel = mongoose.model('Message', MessageSchema);
@@ -142,7 +157,7 @@ io.on('connection', (socket) => {
           if (secret_key === calculatedSecretKey) {
             const timestampedMessage = {
               ...messageData,
-              timestamp: new Date(),
+              timestamp: formattedDate,
             };
 
             // Insert the new data into the database
